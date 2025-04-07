@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Base functions to check auth and admin status
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+    
+    // Public read-only access for club settings
+    match /settings/{setting} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Restrict swimmer data access
+    match /swimmers/{swimmer} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAuthenticated();
+    }
+    
+    // User management - only admins can write to other user profiles
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin() || request.auth.uid == userId;
+    }
+    
+    // Deny access to any other collections by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
