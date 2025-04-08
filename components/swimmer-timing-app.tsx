@@ -1,25 +1,26 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Moon, Sun, PlusCircle, Trash2, Flag, BarChart3, LogOut, Settings, Clock, Users } from "lucide-react"
+import { Moon, Sun, PlusCircle, Trash2, Flag, BarChart3, LogOut, Settings, Clock, Users, Search, MoreVertical } from "lucide-react"
 import { useTheme } from "next-themes"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { useAuth } from "./auth-provider"
 import { useFirebase } from "./firebase-provider"
 import { LoginForm } from "./login-form"
 import { ClubSettings } from "./club-settings"
 import { UserManagement } from "./user-management"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 // Error display component
 const FirebaseErrorDisplay = ({ error }: { error: string }) => {
@@ -177,6 +178,7 @@ export default function SwimmerTimingApp() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [userManagementOpen, setUserManagementOpen] = useState(false)
   const [is24HourFormat, setIs24HourFormat] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
 
   // Effect for real-time clock
   useEffect(() => {
@@ -370,6 +372,26 @@ export default function SwimmerTimingApp() {
     return swimmers.find((swimmer) => swimmer.id === selectedSwimmer)
   }
 
+  // Delete an individual time record
+  const handleDeleteTimeRecord = async (swimmerId: string, timeId: string) => {
+    if (!initialized) return;
+    
+    const swimmer = swimmers.find(s => s.id === swimmerId);
+    if (!swimmer) return;
+
+    // Filter out the time record to be deleted
+    const updatedTimes = swimmer.times.filter(t => t.id !== timeId);
+    
+    // Create updated swimmer object
+    const updatedSwimmer = {
+      ...swimmer,
+      times: updatedTimes,
+    };
+
+    // Update the swimmer in Firebase
+    await updateSwimmer(swimmerId, updatedSwimmer);
+  }
+
   // Check if a lap split time is better or worse than the personal best
   const compareLapWithBest = (swimmer: Swimmer, lapNumber: number, splitTime: number) => {
     if (!swimmer.bestLapTimes[lapNumber]) return "neutral"
@@ -456,6 +478,14 @@ export default function SwimmerTimingApp() {
         return dateA.getTime() - dateB.getTime()
       })
   }
+
+  // Filter swimmers based on search query
+  const filteredSwimmers = useMemo(() => {
+    if (!searchQuery.trim()) return swimmers;
+    return swimmers.filter(swimmer => 
+      swimmer.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [swimmers, searchQuery]);
 
   // Render based on initialization state
   if (firebaseError) {
@@ -732,106 +762,132 @@ export default function SwimmerTimingApp() {
           </CardContent>
         </Card>
 
-        {/* Swimmer Management */}
+        {/* Swimmer Selection Section */}
         <Card className="col-span-1">
-          <CardHeader>
-            <CardTitle>Swimmers</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Swimmers</CardTitle>
+              <CardDescription>Select a swimmer to record time</CardDescription>
+            </div>
+            {isAdmin && (
+              <Button variant="outline" onClick={() => setUserManagementOpen(true)}>
+                <Users className="h-4 w-4 mr-2" /> Users
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
-            {isAdmin && (
-              <div className="flex gap-2 mb-4">
+            {/* Search input for swimmers */}
+            <div className="mb-4">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Swimmer name"
-                  value={newSwimmerName}
-                  onChange={(e) => setNewSwimmerName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddSwimmer()}
+                  type="search"
+                  placeholder="Search swimmers..."
+                  className="pl-8"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                 />
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button onClick={handleAddSwimmer} size="icon">
-                        <PlusCircle className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Add new swimmer</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
               </div>
-            )}
+            </div>
 
-            <ScrollArea className="h-[300px] rounded-md border p-2">
-              {swimmers.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">No swimmers added yet</div>
-              ) : (
-                <div className="space-y-2">
-                  {swimmers.map((swimmer) => (
-                    <div
-                      key={swimmer.id}
-                      className={`flex justify-between items-center p-2 rounded-md ${
-                        selectedSwimmer === swimmer.id ? "bg-primary/10 dark:bg-primary/20" : "hover:bg-muted/50"
-                      }`}
-                    >
-                      <div className="flex-1 cursor-pointer" onClick={() => setSelectedSwimmer(swimmer.id)}>
-                        <div className="font-medium">{swimmer.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {swimmer.times.length} times recorded
-                          {getBestTime(swimmer.times, selectedStroke, selectedDistance) !== null && (
-                            <span>
-                              {" "}
-                              • Best {selectedStroke} {selectedDistance}:{" "}
-                              {formatTime(getBestTime(swimmer.times, selectedStroke, selectedDistance)!)}
-                            </span>
+            {/* Swimmers list */}
+            <div className="space-y-4">
+              {/* Add Swimmer form (admin only) */}
+              {isAdmin && (
+                <div className="flex gap-2 mb-4">
+                  <Input
+                    placeholder="Swimmer name"
+                    value={newSwimmerName}
+                    onChange={(e) => setNewSwimmerName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddSwimmer()}
+                  />
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button onClick={handleAddSwimmer} size="icon">
+                          <PlusCircle className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Add new swimmer</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              )}
+
+              <ScrollArea className="h-[300px] rounded-md border p-2">
+                {filteredSwimmers.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">No swimmers found</div>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredSwimmers.map((swimmer) => (
+                      <div
+                        key={swimmer.id}
+                        className={`flex justify-between items-center p-2 rounded-md ${
+                          selectedSwimmer === swimmer.id ? "bg-primary/10 dark:bg-primary/20" : "hover:bg-muted/50"
+                        }`}
+                      >
+                        <div className="flex-1 cursor-pointer" onClick={() => setSelectedSwimmer(swimmer.id)}>
+                          <div className="font-medium">{swimmer.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {swimmer.times.length} times recorded
+                            {getBestTime(swimmer.times, selectedStroke, selectedDistance) !== null && (
+                              <span>
+                                {" "}
+                                • Best {selectedStroke} {selectedDistance}:{" "}
+                                {formatTime(getBestTime(swimmer.times, selectedStroke, selectedDistance)!)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center">
+                          {swimmer.times.length > 0 && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setTimelineView(swimmer.id)}
+                                    className="h-8 w-8 mr-1"
+                                  >
+                                    <BarChart3 className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>View performance timeline</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+
+                          {isAdmin && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleRemoveSwimmer(swimmer.id)}
+                                    className="h-8 w-8"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Remove swimmer</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center">
-                        {swimmer.times.length > 0 && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => setTimelineView(swimmer.id)}
-                                  className="h-8 w-8 mr-1"
-                                >
-                                  <BarChart3 className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>View performance timeline</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-
-                        {isAdmin && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleRemoveSwimmer(swimmer.id)}
-                                  className="h-8 w-8"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Remove swimmer</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -968,101 +1024,130 @@ export default function SwimmerTimingApp() {
         </TabsContent>
       </Tabs>
 
-      {/* Chronological Performance View */}
-      {timelineView && (
-        <Card className="mt-6">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>{swimmers.find((s) => s.id === timelineView)?.name} - Performance Timeline</CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => setTimelineView(null)}>
-              Close
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue={STROKE_TYPES[0]}>
-              <TabsList className="flex flex-wrap">
+      {/* Timeline View Modal */}
+      <Dialog open={timelineView !== null} onOpenChange={(open) => !open && setTimelineView(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-auto">
+          {timelineView && (
+            <>
+              <DialogHeader>
+                <DialogTitle>
+                  {swimmers.find((s) => s.id === timelineView)?.name} - Performance Timeline
+                </DialogTitle>
+                <DialogDescription>
+                  View historical performance data for {selectedStroke} {selectedDistance}
+                </DialogDescription>
+              </DialogHeader>
+
+              <Tabs defaultValue={selectedStroke} className="mt-4">
+                <TabsList className="mb-4">
+                  {STROKE_TYPES.map((stroke) => (
+                    <TabsTrigger key={stroke} value={stroke}>
+                      {stroke}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+
                 {STROKE_TYPES.map((stroke) => (
-                  <TabsTrigger key={stroke} value={stroke} className="flex-grow">
-                    {stroke}
-                  </TabsTrigger>
+                  <TabsContent key={stroke} value={stroke}>
+                    <div className="space-y-4">
+                      {DISTANCES.map((distance) => {
+                        const times = getChronologicalTimes(timelineView, stroke, distance)
+                        if (times.length === 0) return null
+
+                        return (
+                          <Card key={distance}>
+                            <CardHeader>
+                              <CardTitle>{distance}</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-2">
+                                <div className="grid grid-cols-[1fr_auto_auto] gap-4 font-bold">
+                                  <div>Date</div>
+                                  <div>Time</div>
+                                  {isAdmin && <div>Actions</div>}
+                                </div>
+                                {times.map((timeRecord) => (
+                                  <div
+                                    key={timeRecord.id}
+                                    className="grid grid-cols-[1fr_auto_auto] gap-4 py-2 border-t"
+                                  >
+                                    <div>{formatDate(timeRecord.date)}</div>
+                                    <div className="font-mono">{formatTime(timeRecord.time)}</div>
+                                    {isAdmin && (
+                                      <div>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() => handleDeleteTimeRecord(timelineView, timeRecord.id)}
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )
+                      })}
+                    </div>
+                  </TabsContent>
                 ))}
-              </TabsList>
+              </Tabs>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
-              {STROKE_TYPES.map((stroke) => (
-                <TabsContent key={stroke} value={stroke} className="mt-4">
-                  <div className="space-y-4">
-                    {DISTANCES.map((distance) => {
-                      const chronologicalTimes = getChronologicalTimes(timelineView, stroke, distance)
-
-                      if (chronologicalTimes.length === 0) return null
-
-                      // Find the best time for this stroke/distance
-                      const bestTime = Math.min(...chronologicalTimes.map((t) => t.time))
-
-                      return (
-                        <div key={distance} className="space-y-2">
-                          <h3 className="text-sm font-medium">{distance}</h3>
-                          <div className="rounded-md border overflow-hidden">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Date</TableHead>
-                                  <TableHead>Time</TableHead>
-                                  <TableHead>Improvement</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {chronologicalTimes.map((record, index) => {
-                                  const previousTime = index > 0 ? chronologicalTimes[index - 1].time : null
-                                  const improvement = previousTime ? previousTime - record.time : 0
-                                  const isPB = record.time === bestTime
-
-                                  return (
-                                    <TableRow key={record.id}>
-                                      <TableCell>{formatDate(record.date)}</TableCell>
-                                      <TableCell
-                                        className={cn(
-                                          "font-mono",
-                                          isPB && "font-bold text-green-500 dark:text-green-400",
-                                        )}
-                                      >
-                                        {formatTime(record.time)}
-                                        {isPB && " (PB)"}
-                                      </TableCell>
-                                      <TableCell>
-                                        {improvement > 0 ? (
-                                          <span className="text-green-500 dark:text-green-400">
-                                            -{formatTime(improvement)}
-                                          </span>
-                                        ) : index === 0 ? (
-                                          <span className="text-muted-foreground">First time</span>
-                                        ) : (
-                                          <span className="text-red-500 dark:text-red-400">
-                                            +{formatTime(Math.abs(improvement))}
-                                          </span>
-                                        )}
-                                      </TableCell>
-                                    </TableRow>
-                                  )
-                                })}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        </div>
-                      )
-                    }).filter(Boolean)}
-
-                    {!DISTANCES.some(
-                      (distance) => getChronologicalTimes(timelineView, stroke, distance).length > 0,
-                    ) && (
-                      <div className="text-center py-8 text-muted-foreground">No data recorded for {stroke} yet</div>
-                    )}
-                  </div>
-                </TabsContent>
-              ))}
-            </Tabs>
-          </CardContent>
-        </Card>
-      )}
+      {/* Mobile Actions Menu */}
+      <div className="md:hidden fixed bottom-4 right-4 z-50">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="icon" className="h-12 w-12 rounded-full">
+              <MoreVertical className="h-6 w-6" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={toggleTimeFormat}>
+              <Clock className="mr-2 h-4 w-4" />
+              Toggle 12/24h
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+              {theme === "dark" ? (
+                <>
+                  <Sun className="mr-2 h-4 w-4" />
+                  Light Mode
+                </>
+              ) : (
+                <>
+                  <Moon className="mr-2 h-4 w-4" />
+                  Dark Mode
+                </>
+              )}
+            </DropdownMenuItem>
+            {isAdmin && (
+              <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </DropdownMenuItem>
+            )}
+            {isAdmin && (
+              <DropdownMenuItem onClick={() => setUserManagementOpen(true)}>
+                <Users className="mr-2 h-4 w-4" />
+                Users
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={logout}>
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   )
 }

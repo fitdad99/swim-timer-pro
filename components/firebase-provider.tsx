@@ -338,20 +338,20 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
       const userCredential = await createUserWithEmailAndPassword(auth, userData.email, userData.password)
 
       // Store additional user data in Firestore
-      const usersCol = collection(db, "users")
-      await addDoc(usersCol, {
-        uid: userCredential.user.uid,
+      const userDoc = doc(db, "users", userId);
+      await setDoc(userDoc, {
+        uid: userId,
         email: userData.email,
         displayName: userData.displayName || "",
-        role: userData.role || "user",
+        isAdmin: userData.isAdmin || false,
         createdAt: new Date().toISOString(),
       })
 
       return {
-        uid: userCredential.user.uid,
+        uid: userId,
         email: userData.email,
         displayName: userData.displayName,
-        role: userData.role,
+        isAdmin: userData.isAdmin,
       }
     } catch (error) {
       console.error("Error adding user:", error)
