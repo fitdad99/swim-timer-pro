@@ -17,8 +17,9 @@ import {
   onSnapshot,
   type Firestore,
   enableIndexedDbPersistence,
+  setDoc,
 } from "firebase/firestore"
-import { getAuth, createUserWithEmailAndPassword, type Auth } from "firebase/auth"
+import { getAuth, createUserWithEmailAndPassword, type Auth, initializeAuth, signOut, inMemoryPersistence } from "firebase/auth"
 import { getStorage, ref, uploadBytes, getDownloadURL, type FirebaseStorage } from "firebase/storage"
 
 // Create context with proper typing
@@ -334,8 +335,21 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 
     try {
       // In a real application, you would use Firebase Admin SDK
-      // For this demo, we'll create the user with the client SDK
-      const userCredential = await createUserWithEmailAndPassword(auth, userData.email, userData.password)
+      // For this demo, we'll use a separate auth instance to avoid logging out the current user
+      const authConfig = getAuth().config;
+      const tempAuth = initializeAuth(app!, {
+        persistence: inMemoryPersistence,
+        ...authConfig
+      });
+    
+      // Use the temporary auth instance to create the user
+      const userCredential = await createUserWithEmailAndPassword(tempAuth, userData.email, userData.password)
+      
+      // Get the user ID from the credential
+      const userId = userCredential.user.uid;
+      
+      // Sign out from temp auth to clean up
+      await signOut(tempAuth);
 
       // Store additional user data in Firestore
       const userDoc = doc(db, "users", userId);
