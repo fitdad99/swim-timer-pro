@@ -331,15 +331,14 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
   }
 
   const addUser = async (userData: any) => {
-    if (!db || !auth) return null
+    if (!db || !auth || !app) return null
 
     try {
       // In a real application, you would use Firebase Admin SDK
       // For this demo, we'll use a separate auth instance to avoid logging out the current user
-      const authConfig = getAuth().config;
-      const tempAuth = initializeAuth(app!, {
-        persistence: inMemoryPersistence,
-        ...authConfig
+      // Create a temporary auth instance with minimal configuration
+      const tempAuth = initializeAuth(app, {
+        persistence: inMemoryPersistence
       });
     
       // Use the temporary auth instance to create the user
