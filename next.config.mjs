@@ -22,11 +22,15 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  output: 'export',
+  distDir: 'build',
   experimental: {
     webpackBuildWorker: true,
     parallelServerBuildTraces: true,
     parallelServerCompiles: true,
   },
+  // Disable static page generation to avoid useContext errors
+  staticPageGenerationTimeout: 0,
 }
 
 if (userConfig) {

@@ -105,7 +105,7 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
         // Initialize Firestore with error handling
         try {
           // Enable offline persistence (helps with connection issues)
-          enableIndexedDbPersistence(firestore).catch((err) => {
+          enableIndexedDbPersistence(firestore).catch((err: { code: string }) => {
             if (err.code === "failed-precondition") {
               console.warn("Multiple tabs open, persistence can only be enabled in one tab at a time.")
             } else if (err.code === "unimplemented") {
@@ -149,7 +149,7 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
     try {
       const swimmersCol = collection(db, "swimmers")
       const snapshot = await getDocs(swimmersCol)
-      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+      return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))
     } catch (error) {
       console.error("Error getting swimmers:", error)
       // Return empty array instead of throwing to prevent UI crashes
@@ -292,16 +292,16 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
       // Use a more robust onSnapshot implementation with error handling
       const unsubscribe = onSnapshot(
         swimmersCol,
-        (snapshot) => {
+        (snapshot: any) => {
           try {
-            const swimmers = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+            const swimmers = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }))
             callback(swimmers)
           } catch (parseError) {
             console.error("Error parsing swimmer data:", parseError)
             callback([]) // Return empty array to prevent UI crashes
           }
         },
-        (error) => {
+        (error: any) => {
           console.error("Firestore subscription error:", error)
           // Don't call callback here to avoid UI errors
         },
@@ -323,7 +323,7 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
       // For this demo, we'll use a collection to store user data
       const usersCol = collection(db, "users")
       const snapshot = await getDocs(usersCol)
-      return snapshot.docs.map((doc) => ({ uid: doc.id, ...doc.data() }))
+      return snapshot.docs.map((doc: any) => ({ uid: doc.id, ...doc.data() }))
     } catch (error) {
       console.error("Error getting users:", error)
       return []
@@ -335,20 +335,33 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
 
     try {
       // In a real application, you would use Firebase Admin SDK
-      // For this demo, we'll use a separate auth instance to avoid logging out the current user
-      // Create a temporary auth instance with minimal configuration
-      const tempAuth = initializeAuth(app, {
-        persistence: inMemoryPersistence
-      });
+      // For this demo, we'll use a more robust approach that works with Next.js
+      let tempAuth: Auth;
+      
+      try {
+        // Try to initialize with in-memory persistence first
+        tempAuth = initializeAuth(app, {
+          persistence: inMemoryPersistence
+        });
+      } catch (error) {
+        console.warn("Could not initialize auth with in-memory persistence, falling back to default:", error);
+        // Fallback to default auth if initializeAuth fails
+        tempAuth = getAuth(app);
+      }
     
-      // Use the temporary auth instance to create the user
+      // Use the auth instance to create the user
       const userCredential = await createUserWithEmailAndPassword(tempAuth, userData.email, userData.password)
       
       // Get the user ID from the credential
       const userId = userCredential.user.uid;
       
-      // Sign out from temp auth to clean up
-      await signOut(tempAuth);
+      try {
+        // Try to sign out from temp auth to clean up
+        await signOut(tempAuth);
+      } catch (signOutError) {
+        console.warn("Error signing out from temporary auth:", signOutError);
+        // Continue even if sign out fails
+      }
 
       // Store additional user data in Firestore
       const userDoc = doc(db, "users", userId);
